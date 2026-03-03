@@ -1,10 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 import { calculateDistance } from '../../utils/distance';
+import { cacheService } from '../../utils/cache';
 
 const prisma = new PrismaClient();
 
 export class WarehouseService {
     static async findNearestWarehouse(sellerId: number, productId: number) {
+        const cacheKey = `nearest_warehouse:${sellerId}:${productId}`;
+        const cachedResult = await cacheService.get(cacheKey);
+
+        if (cachedResult) {
+            console.log('Serving from cache!');
+            return JSON.parse(cachedResult);
+        }
+
         const seller = await prisma.seller.findUnique({
             where: { id: sellerId },
             include: { products: { where: { id: productId } } }
@@ -42,10 +51,15 @@ export class WarehouseService {
             }
         }
 
-        return {
+        const result = {
             nearestWarehouse,
             distanceFromSeller: minDistance,
             product
         };
+
+        // Cache for 1 hour
+        await cacheService.set(cacheKey, JSON.stringify(result), 3600);
+
+        return result;
     }
 }
